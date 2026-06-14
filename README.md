@@ -1,5 +1,7 @@
 # ShishuGuard
 
+Live Demo: https://shishuguard-ka06yii57-aditipathak123s-projects.vercel.app/
+
 ShishuGuard is an AI-powered full-stack baby-care companion built for parents who want one calm place to manage daily routines, health records, memories, essentials, reminders, and intelligent parenting support.
 
 The project is designed as more than a CRUD dashboard. It connects multiple real parenting workflows into one product experience: logging care activity, tracking growth and vaccines, organizing memories, monitoring baby essentials, receiving notifications, and asking an AI care assistant for context-aware help.
