@@ -1,0 +1,609 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import Button  from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Badge from "../components/ui/Badge";
+import Babyessentials from "../components/Babyessentials";
+import { Plus, Package, AlertTriangle, Edit, Trash2, Bell, Save, ShoppingCart, ChevronDown, ChevronUp } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import LoginPrompt from "../components/LoginPrompt";
+
+const itemCategories = [
+  { id: "diapering", name: "Diapers & Wipes", icon: "🍼" },
+  { id: "feeding", name: "Feeding Supplies", icon: "🍼" },
+  { id: "clothing", name: "Clothing", icon: "👕" },
+  { id: "health", name: "Health & Safety", icon: "🏥" },
+  { id: "playtime", name: "Toys & Books", icon: "🧸" },
+  { id: "bathing", name: "Bathing", icon: "🛁" },
+  { id: "sleeping", name: "Sleeping", icon: "😴" },
+  { id: "travel", name: "Travel", icon: "✈️" },
+  { id: "traditional", name: "Traditional Items", icon: "🪔" },
+  { id: "cleaning", name: "Cleaning Supplies", icon: "🧼" },
+  { id: "others", name: "Others", icon: "📦" },
+];
+
+export default function Page() {
+  const { isAuth, isLoading } = useAuth();
+  const [inventory, setInventory] = useState([]);
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [newItem, setNewItem] = useState({
+    name: "",
+    category: "diapering",
+    currentStock: "",
+    minThreshold: "",
+    unit: "pieces",
+    notes: "",
+  });
+  const [showEssentials, setShowEssentials] = useState(false);
+  const [isInventoryLoading, setIsInventoryLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionError, setActionError] = useState("");
+
+  // Get auth token from localStorage
+  const getAuthToken = useCallback(() => {
+    return localStorage.getItem("token");
+  }, []);
+
+  // Fetch inventory from API
+  const fetchInventory = useCallback(async () => {
+    try {
+      setIsInventoryLoading(true);
+      const token = getAuthToken();
+      if (!token) throw new Error("No authentication token found");
+
+      const response = await fetch("/api/essentials", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to fetch inventory");
+      }
+
+      const data = await response.json();
+      setInventory(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      console.error("Error fetching inventory:", err);
+    } finally {
+      setIsInventoryLoading(false);
+    }
+  }, [getAuthToken]);
+
+  useEffect(() => {
+    document.title = "Essentials |  ShishuGuard";
+    if (isAuth) {
+      fetchInventory();
+    }
+  }, [isAuth, fetchInventory]);
+
+  // Add new item
+  const addItem = async () => {
+    if (newItem.name && newItem.currentStock && newItem.minThreshold) {
+      try {
+        const token = getAuthToken();
+        if (!token) throw new Error("No authentication token found");
+
+        const response = await fetch("/api/essentials", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(newItem),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to add item");
+        }
+
+        const addedItem = await response.json();
+        setInventory([...inventory, addedItem]);
+        setActionError("");
+        setNewItem({
+          name: "",
+          category: "diapering",
+          currentStock: "",
+          minThreshold: "",
+          unit: "pieces",
+          notes: "",
+        });
+        setIsAddingItem(false);
+      } catch (err) {
+        setActionError(err.message);
+        console.error("Error adding item:", err);
+      }
+    }
+  };
+
+  // Update item
+  const updateItem = async (id, updatedItem) => {
+    try {
+      const token = getAuthToken();
+      if (!token) throw new Error("No authentication token found");
+
+      const response = await fetch(`/api/essentials/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedItem),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update item");
+      }
+
+      const updatedItemData = await response.json();
+      setInventory(inventory.map((item) => (item._id === id ? updatedItemData : item)));
+      setEditingItem(null);
+      setActionError("");
+    } catch (err) {
+      setActionError(err.message);
+      console.error("Error updating item:", err);
+    }
+  };
+
+  // Delete item
+  const deleteItem = async (id) => {
+    try {
+      const token = getAuthToken();
+      if (!token) throw new Error("No authentication token found");
+
+      const response = await fetch(`/api/essentials/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete item");
+      }
+
+      setInventory(inventory.filter((item) => item._id !== id));
+      setActionError("");
+    } catch (err) {
+      setActionError(err.message);
+      console.error("Error deleting item:", err);
+    }
+  };
+
+  // Update stock
+  const updateStock = async (id, newStock) => {
+    try {
+      const token = getAuthToken();
+      if (!token) throw new Error("No authentication token found");
+
+      const response = await fetch(`/api/essentials/stock/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentStock: newStock }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update stock");
+      }
+
+      const updatedItem = await response.json();
+      setInventory(inventory.map((item) => (item._id === id ? updatedItem : item)));
+      setActionError("");
+    } catch (err) {
+      setActionError(err.message);
+      console.error("Error updating stock:", err);
+    }
+  };
+
+  const lowStockItems = inventory.filter((item) => item.currentStock <= item.minThreshold);
+  const outOfStockItems = inventory.filter((item) => item.currentStock === 0);
+
+  const getStockStatus = (item) => {
+    if (item.currentStock === 0) return { status: "out", color: "bg-red-400 text-red-700", text: "Out of Stock" };
+    if (item.currentStock <= item.minThreshold) return { status: "low", color: "bg-yellow-500 text-yellow-700 ", text: "Low Stock" };
+    return { status: "good", color: "bg-green-500 text-green-700", text: "In Stock" };
+  };
+
+  const getCategoryIcon = (categoryId) => {
+    const category = itemCategories.find((cat) => cat.id === categoryId);
+    return category ? category.icon : "📦";
+  };
+
+  const handleAddEssentialToInventory = (essentialName, essentialCategory) => {
+    const validCategories = ["clothing", "traditional", "health", "diapering", "feeding", "bathing", "sleeping", "playtime", "travel", "cleaning"];
+    const categoryToShow = validCategories.includes(essentialCategory) ? essentialCategory : "others";
+
+    setNewItem({
+      name: essentialName,
+      category: categoryToShow,
+      currentStock: "",
+      minThreshold: "",
+      unit: "pieces",
+      notes: "",
+    });
+    setIsAddingItem(true);
+    setEditingItem(null);
+  };
+
+  if (isInventoryLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020617] text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-cyan-300"></div>
+          <p className="text-2xl font-bold">Loading your baby essentials...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020617] text-white">
+        <div className="mx-auto max-w-md rounded-2xl border border-red-400/30 bg-red-950/40 p-6 text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-red-700 mb-2">Error Loading Data</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={fetchInventory} className="bg-red-600 hover:bg-red-700">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state during hydration to prevent mismatch
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020617]">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-300">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt if user is not authenticated
+  if (!isAuth) {
+    return <LoginPrompt sectionName="essentials tracker" />;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#020617] px-4 py-8 text-white sm:px-6 md:px-8">
+    <div className="mx-auto max-w-7xl space-y-6">
+      {/* Header and Add Item Button */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="mb-1 text-3xl font-bold text-white">Baby Essentials Tracker</h2>
+          <p className="text-sm text-gray-300">Keep track of diapers, formula, and other baby essentials</p>
+        </div>
+        <Button onClick={() => setIsAddingItem(true)} className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Item
+        </Button>
+      </div>
+
+      {actionError && (
+        <div className="rounded-2xl border border-red-400/30 bg-red-950/40 px-4 py-3 text-sm font-bold text-red-100">
+          {actionError}
+        </div>
+      )}
+
+      {/* "See Essentials" Toggle */}
+      <div className="mt-6 border-t border-white/10 pt-6">
+        <h3 className="mb-1 flex items-center justify-between text-xl font-semibold text-white">
+          <span>Not sure what to add? Start with these essentials:</span>
+          <Button
+            variant="outline"
+            onClick={() => setShowEssentials(!showEssentials)}
+            className="flex items-center gap-1 border-cyan-300/40 bg-gray-950 font-semibold text-cyan-200 hover:bg-white/10">
+            {showEssentials ? (
+              <>
+                Hide Essentials <ChevronUp className="w-4 h-4 ml-1" />
+              </>
+            ) : (
+              <>
+                See Essentials <ChevronDown className="w-4 h-4 ml-1" />
+              </>
+            )}
+          </Button>
+        </h3>
+      </div>
+      {showEssentials && (
+        <div className={`transition-all duration-300 ease-in-out ${showEssentials ? "max-h-[500px]" : "max-h-0"} overflow-hidden`}>
+          <Babyessentials onAddEssential={handleAddEssentialToInventory} />
+        </div>
+      )}
+
+      {/* Alerts */}
+      {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (
+        <div className="space-y-3">
+          {outOfStockItems.length > 0 && (
+            <Card className="border-red-400/30 bg-red-950/40 text-red-100">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  <span className="font-semibold text-red-100">Out of Stock ({outOfStockItems.length} items)</span>
+                </div>
+                <div className="flex flex-wrap gap-2 overflow-auto">
+                  {outOfStockItems.map((item) => (
+                    <Badge key={item._id} variant="destructive">
+                      {item.name}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {lowStockItems.length > 0 && (
+            <Card className="border-yellow-400/30 bg-yellow-950/30 text-yellow-100">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bell className="w-5 h-5 text-yellow-600" />
+                  <span className="font-semibold text-yellow-100">Low Stock Alert ({lowStockItems.length} items)</span>
+                </div>
+                <div className="flex flex-wrap gap-2 overflow-auto">
+                  {lowStockItems.map((item) => (
+                    <Badge key={item._id} className="bg-yellow-200 text-yellow-700">
+                      {item.name} ({item.currentStock} left)
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Add/Edit Item */}
+      {(isAddingItem || editingItem) && (
+<Card className="relative overflow-hidden rounded-[32px] border border-white/10 bg-gray-950 text-white shadow-2xl backdrop-blur-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Package className="w-5 h-5 text-blue-600" />
+              {editingItem ? "Edit Item" : "Add New Item"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-gray-200">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Item Name</label>
+                <Input
+                  placeholder="e.g., Newborn Diapers"
+                  className="bg-[#0f172a] border border-cyan-500/20 text-white placeholder:text-gray-500 rounded-2xl focus:ring-2 focus:ring-cyan-400"
+                  value={editingItem ? editingItem.name : newItem.name}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, name: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, name: e.target.value });
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Category</label>
+                <select
+                  className="w-full p-3 bg-[#0f172a] text-cyan-200 border border-cyan-500/20 rounded-2xl focus:ring-2 focus:ring-cyan-400 outline-none"
+                  value={editingItem ? editingItem.category : newItem.category}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, category: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, category: e.target.value });
+                    }
+                  }}>
+                  {itemCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Current Stock</label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                 className="bg-[#0f172a] border border-cyan-500/20 text-white placeholder:text-gray-500 rounded-2xl focus:ring-2 focus:ring-cyan-400"
+                  value={editingItem ? editingItem.currentStock : newItem.currentStock}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, currentStock: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, currentStock: e.target.value });
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Low Stock Alert (minimum)</label>
+                <Input
+                  type="number"
+                  placeholder="5"
+                  className="bg-[#0f172a] border border-cyan-500/20 text-white placeholder:text-gray-500 rounded-2xl focus:ring-2 focus:ring-cyan-400"
+                  value={editingItem ? editingItem.minThreshold : newItem.minThreshold}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, minThreshold: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, minThreshold: e.target.value });
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Unit</label>
+                <select
+                  className="w-full p-3 bg-[#0f172a] text-cyan-200 border border-cyan-500/20 rounded-2xl focus:ring-2 focus:ring-cyan-400 outline-none"
+                  value={editingItem ? editingItem.unit : newItem.unit}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, unit: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, unit: e.target.value });
+                    }
+                  }}>
+                  <option value="pieces">Pieces</option>
+                  <option value="bottles">Bottles</option>
+                  <option value="packs">Packs</option>
+                  <option value="boxes">Boxes</option>
+                  <option value="oz">Ounces</option>
+                  <option value="lbs">Pounds</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 bg-gradient-to-r from-cyan-400 via-blue-400 to-pink-400 bg-clip-text text-transparent tracking-wide">Notes</label>
+                <Input
+                  placeholder="Optional notes"
+                  className="bg-[#0f172a] border border-cyan-500/20 text-white placeholder:text-gray-500 rounded-2xl focus:ring-2 focus:ring-cyan-400"
+                  value={editingItem ? editingItem.notes : newItem.notes}
+                  onChange={(e) => {
+                    if (editingItem) {
+                      setEditingItem({ ...editingItem, notes: e.target.value });
+                    } else {
+                      setNewItem({ ...newItem, notes: e.target.value });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={editingItem ? () => updateItem(editingItem._id, editingItem) : addItem} className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
+                <Save className="w-4 h-4 mr-2" />
+                {editingItem ? "Update" : "Add"} Item
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsAddingItem(false);
+                  setEditingItem(null);
+                  setNewItem({
+                    name: "",
+                    category: "diapering",
+                    currentStock: "",
+                    minThreshold: "",
+                    unit: "pieces",
+                    notes: "",
+                  });
+                }}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Essentials List */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {inventory.map((item) => {
+          const stockStatus = getStockStatus(item);
+          return (
+            <Card key={item._id} className="border-white/10 bg-white/[0.06] text-gray-100 backdrop-blur-sm transition-shadow hover:shadow-lg">
+              <CardHeader className="relative">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-500/10 blur-3xl rounded-full"></div>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{getCategoryIcon(item.category)}</span>
+                    <div>
+                      <CardTitle className="text-lg">{item.name}</CardTitle>
+                      <p className="text-sm text-gray-300">{itemCategories.find((cat) => cat.id === item.category)?.name}</p>
+                    </div>
+                  </div>
+                  <Badge className={stockStatus.color}>{stockStatus.text}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Current Stock:</span>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" value={item.currentStock} onChange={(e) => updateStock(item._id, e.target.value)} className="h-8 w-20 bg-gray-950 text-center text-white" />
+                    <span className="text-sm text-gray-300">{item.unit}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-300">Alert when below:</span>
+                  <span className="font-medium">
+                    {item.minThreshold} {item.unit}
+                  </span>
+                </div>
+
+                {item.notes && (
+                  <p className="text-sm text-gray-300 italic">
+                    &quot;{item.notes}&quot;
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setEditingItem(item)} className="flex-1">
+                    <Edit className="w-3 h-3 mr-1 dark:text-gray-200" />
+                    <span className="dark:text-gray-200">Edit</span>
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-700">
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {inventory.length === 0 && (
+        <Card className="border-white/10 bg-white/[0.06] text-white backdrop-blur-sm">
+          <CardContent className="text-center py-12">
+            <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="mb-2 text-lg font-semibold text-white">No items in inventory</h3>
+            <p className="mb-4 text-gray-300">Start tracking your baby essentials to get low stock alerts</p>
+            <Button onClick={() => setIsAddingItem(true)} className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First Item
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Shopping List */}
+      {lowStockItems.length > 0 && (
+        <Card className="border-orange-400/30 bg-orange-950/30 text-orange-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-orange-600" />
+              Shopping List
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2  ">
+              <div className="flex flex-wrap gap-2 overflow-auto">
+                {lowStockItems.map((item) => (
+                  <div key={item._id} className="flex items-center justify-between rounded bg-white/10 p-2 text-gray-100">
+                    <span>{item.name}</span>
+                    <Badge variant="outline">
+                      Need: {Math.max(item.minThreshold * 2 - item.currentStock, item.minThreshold)} {item.unit}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+    </div>
+  );
+}
